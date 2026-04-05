@@ -1,8 +1,0 @@
-name: luxel-env
-channels:
-  - conda-forge
-dependencies:
-  - python=3.10
-  - mamba
-  - cadquery=2.4.0
-  - streamlit=1.31.0
