@@ -80,10 +80,17 @@ st.markdown("""
             transition: all 0.2s ease-in-out;
             margin-top: 10px;
         }
-        .stButton > button:hover {
+        .stButton > button:hover, .stFormSubmitButton > button:hover {
             background-color: #FF4500 !important;
             border-color: #FF4500 !important;
             color: #FFFFFF !important;
+        }
+        
+        /* Specific styling for the Form Submit Button to make it pop */
+        .stFormSubmitButton > button {
+            background-color: #222222 !important;
+            color: #FFFFFF !important;
+            border: 1px solid #222222 !important;
         }
         
         /* Hide Streamlit Branding */
@@ -95,7 +102,7 @@ st.markdown("""
 st.sidebar.markdown("<h2 style='text-transform:uppercase; letter-spacing:2px; font-size:16px; margin-bottom: 0;'>Luxel Console</h2>", unsafe_allow_html=True)
 
 # ==========================================
-# 1. STYLE & HARDWARE
+# 1. STYLE & HARDWARE (OUTSIDE FORM)
 # ==========================================
 st.sidebar.markdown("<div class='braun-header'>1. Foundation</div>", unsafe_allow_html=True)
 design_path = st.sidebar.radio("Design Methodology", ["Path A: Geometric & Textured", "Path B: Sculpted Flower"])
@@ -117,54 +124,57 @@ else:
     h_rad = 0
     min_base = 20
     
-h_height = st.sidebar.slider("Shade Total Height", 100, 400, 220)
+# ==========================================
+# 2. THE FORM (PROTECTS SERVER FROM SLIDER SPAM)
+# ==========================================
+with st.sidebar.form("design_form"):
+    h_height = st.slider("Shade Total Height", 100, 400, 220)
 
-# ==========================================
-# 2. SHADE UI (PATH A & B)
-# ==========================================
-if not is_path_b:
-    st.sidebar.markdown("<div class='braun-header'>2. The 3-Plane Profile</div>", unsafe_allow_html=True)
-    col1, col2, col3 = st.sidebar.columns(3)
-    bot_w = col1.slider("Btm W", min_base, 250, max(80, min_base))
-    bel_w = col2.slider("Mid W", 30, 250, 80)
-    top_w = col3.slider("Top W", 20, 200, 60)
+    # SHADE UI
+    if not is_path_b:
+        st.markdown("<div class='braun-header'>2. The 3-Plane Profile</div>", unsafe_allow_html=True)
+        col1, col2, col3 = st.columns(3)
+        bot_w = col1.slider("Btm W", min_base, 250, max(80, min_base))
+        bel_w = col2.slider("Mid W", 30, 250, 80)
+        top_w = col3.slider("Top W", 20, 200, 60)
+            
+        st.markdown("<div class='braun-header'>3. Base Shape</div>", unsafe_allow_html=True)
+        core_profile = st.radio("Profile Type", ["Polygon", "Star"])
+        sides = st.slider("Sides / Points", 3, 12, 4)
+        pinch = st.slider("Star Pinch (%)", 0, 80, 40) / 100.0 if core_profile == "Star" else 0
+        aspect = st.slider("Aspect Ratio", 0.5, 3.0, 1.0) if sides == 4 else 1.0
         
-    st.sidebar.markdown("<div class='braun-header'>3. Base Shape</div>", unsafe_allow_html=True)
-    core_profile = st.sidebar.radio("Profile Type", ["Polygon", "Star"])
-    sides = st.sidebar.slider("Sides / Points", 3, 12, 4)
-    pinch = st.sidebar.slider("Star Pinch (%)", 0, 80, 40) / 100.0 if core_profile == "Star" else 0
-    aspect = st.sidebar.slider("Aspect Ratio", 0.5, 3.0, 1.0) if sides == 4 else 1.0
-    
-    st.sidebar.markdown("<div class='braun-header'>4. Modifiers</div>", unsafe_allow_html=True)
-    twist = st.sidebar.slider("Twist (Deg)", 0, 360, 0)
-    texture = st.sidebar.radio("Texture", ["Smooth", "Waves", "Flutes"])
-    if texture != "Smooth":
-        st.sidebar.warning("Texture Active: Fillet locked to 0.")
-        f_count = st.sidebar.slider("Ridges/side", 1, 20, 10)
-        f_depth = st.sidebar.slider("Depth (mm)", 0.0, 10.0, 3.0)
-        fillet_val = 0
+        st.markdown("<div class='braun-header'>4. Modifiers</div>", unsafe_allow_html=True)
+        twist = st.slider("Twist (Deg)", 0, 360, 0)
+        texture = st.radio("Texture", ["Smooth", "Waves", "Flutes"])
+        if texture != "Smooth":
+            st.warning("Texture Active: Fillet locked to 0.")
+            f_count = st.slider("Ridges/side", 1, 20, 10)
+            f_depth = st.slider("Depth (mm)", 0.0, 10.0, 3.0)
+            fillet_val = 0
+        else:
+            f_count, f_depth = 0, 0
+            f_max = 0 if twist > 45 else (5 if twist > 0 else 20)
+            fillet_val = st.slider("Fillet (mm)", 0, f_max, 0) if f_max > 0 else 0
     else:
-        f_count, f_depth = 0, 0
-        f_max = 0 if twist > 45 else (5 if twist > 0 else 20)
-        fillet_val = st.sidebar.slider("Fillet (mm)", 0, f_max, 0) if f_max > 0 else 0
-else:
-    st.sidebar.markdown("<div class='braun-header'>2. Silhouette Sculptor</div>", unsafe_allow_html=True)
-    bot_w = st.sidebar.slider("Base Width", min_base, 250, max(100, min_base))
-    pts = [st.sidebar.slider(f"Curve Pt {i+1}", -40, 80, 0) for i in range(6)]
-    bel_w, top_w, twist, texture, sides, aspect, fillet_val, f_depth, core_profile, f_count, pinch = bot_w, bot_w, 0, "Smooth", 36, 1.0, 0, 0, "Polygon", 0, 0
+        st.markdown("<div class='braun-header'>2. Silhouette Sculptor</div>", unsafe_allow_html=True)
+        bot_w = st.slider("Base Width", min_base, 250, max(100, min_base))
+        pts = [st.slider(f"Curve Pt {i+1}", -40, 80, 0) for i in range(6)]
+        bel_w, top_w, twist, texture, sides, aspect, fillet_val, f_depth, core_profile, f_count, pinch = bot_w, bot_w, 0, "Smooth", 36, 1.0, 0, 0, "Polygon", 0, 0
+
+    # STAND UI
+    st.markdown("<div class='braun-header'>5. Base Stand Design</div>", unsafe_allow_html=True)
+    st_style = st.radio("Stand Type", ["Cylindrical", "Conical", "Circular 3-Legged"])
+    st_ht = st.slider("Stand Height", 5, 100, 30)
+    st_bot = st.slider("Floor Width", 60, 250, bot_w + 20) if st_style == "Conical" else bot_w
+    st_ribs = st.slider("Stand Ribs", 0, 60, 0) if st_style != "Circular 3-Legged" else 0
+    st_rib_depth = st.slider("Rib Depth", 0.0, 5.0, 1.0) if st_ribs > 0 else 0
+
+    # THE SUBMIT BUTTON
+    st.form_submit_button("UPDATE PREVIEW")
 
 # ==========================================
-# 3. STAND UI
-# ==========================================
-st.sidebar.markdown("<div class='braun-header'>5. Base Stand Design</div>", unsafe_allow_html=True)
-st_style = st.sidebar.radio("Stand Type", ["Cylindrical", "Conical", "Circular 3-Legged"])
-st_ht = st.sidebar.slider("Stand Height", 5, 100, 30)
-st_bot = st.sidebar.slider("Floor Width", 60, 250, bot_w + 20) if st_style == "Conical" else bot_w
-st_ribs = st.sidebar.slider("Stand Ribs", 0, 60, 0) if st_style != "Circular 3-Legged" else 0
-st_rib_depth = st.sidebar.slider("Rib Depth", 0.0, 5.0, 1.0) if st_ribs > 0 else 0
-
-# ==========================================
-# 4. SHARED POINT ENGINE
+# 3. SHARED POINT ENGINE
 # ==========================================
 def get_outline_master(w, p_idx, is_lip=False):
     target = (w - 1.6) if is_lip else w
@@ -213,7 +223,7 @@ def get_pts_stable(w, is_lip=False):
     return pts_list
 
 # ==========================================
-# 5. GENERATORS
+# 4. GENERATORS
 # ==========================================
 def build_shade():
     try:
@@ -281,7 +291,7 @@ def build_stand():
         st.error(f"Stand Error: {e}"); return None
 
 # ==========================================
-# 6. EXECUTE (Moved to the bottom of the sidebar)
+# 5. EXECUTE (OUTSIDE FORM)
 # ==========================================
 st.sidebar.markdown("<div class='braun-header'>Execute</div>", unsafe_allow_html=True)
 
@@ -304,7 +314,7 @@ if st.sidebar.button("Generate Stand STL"):
                     st.sidebar.download_button("Save Stand", f, "luxel_stand.stl", key="btn_stand")
 
 # ==========================================
-# 7. LIVE 3D PREVIEW
+# 6. LIVE 3D PREVIEW
 # ==========================================
 preview_data = {
     "design_path": "Path B" if is_path_b else "Path A",
