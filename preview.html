@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Luxel Master Pro - Viewport</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #EBEBEB; }
+        canvas { display: block; width: 100vw; height: 100vh; outline: none; }
+    </style>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        const scene = new THREE.Scene();
+        // Matching the Streamlit Warm Gray
+        scene.background = new THREE.Color(0xEBEBEB);
+        
+        const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 1500);
+        camera.position.set(200, 250, 350);
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+        
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.target.set(0, 100, 0);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.update();
+
+        // High-end Studio Lighting for Frosted Glass
+        const ambLight = new THREE.AmbientLight(0xffffff, 0.7);
+        scene.add(ambLight);
+        
+        const keyLight = new THREE.DirectionalLight(0xffffff, 1.0);
+        keyLight.position.set(100, 200, 50);
+        scene.add(keyLight);
+        
+        const rimLight = new THREE.DirectionalLight(0xffffff, 0.5);
+        rimLight.position.set(-100, 100, -200);
+        scene.add(rimLight);
+
+        // Technical drafting grid
+        scene.add(new THREE.GridHelper(400, 40, 0xBBBBBB, 0xDDDDDD));
+
+        let shadeGroup, standGroup;
+        const RES = 288;
+
+        // 1. FROSTED OPAL SHADE
+        const shadeMaterial = new THREE.MeshPhysicalMaterial({ 
+            color: 0xffffff,
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.8,
+            roughness: 0.3,
+            transmission: 0.7, 
+            thickness: 1.0,
+            clearcoat: 0.5,
+            clearcoatRoughness: 0.2
+        });
+
+        // 2. MATTE ANTHRACITE STAND
+        const standMaterial = new THREE.MeshStandardMaterial({
+            color: 0x333333,
+            roughness: 0.8,
+            metalness: 0.1
+        });
+
+        function getPoints(w, p_idx, params) {
+            const ptsList = [];
+            const is_path_b = params.design_path === "Path B";
+            
+            for (let i = 0; i < RES; i++) {
+                const th = (i / RES) * 2 * Math.PI;
+                let bx, by;
+
+                if (is_path_b) {
+                    const fade = p_idx < 0.95 ? 1.0 : (1.0 - p_idx) / 0.05;
+                    const r = (w / 2) * (1.0 - (0.04 * fade * (0.5 * Math.sin(36 * th) + 0.5)));
+                    bx = r * Math.cos(th);
+                    by = r * Math.sin(th);
+                } else {
+                    const step = (2 * Math.PI) / params.sides;
+                    const alpha = (th % step) - (step / 2);
+                    let r = (w / 2) * (Math.cos(step / 2) / Math.cos(alpha));
+                    
+                    if (params.core_profile === "Star") {
+                        r *= (1.0 - (params.pinch * Math.abs((th % step) / step * 2 - 1)));
+                    }
+                    bx = r * params.aspect * Math.cos(th);
+                    by = r * Math.sin(th);
+                    
+                    if (params.texture !== "Smooth") {
+                        const raw = Math.sin(th * params.sides * params.f_count);
+                        let val = raw;
+                        if (params.texture === "Flutes") {
+                            val = raw > 0.3 ? 1.0 : (raw < -0.3 ? -1.0 : 0);
+                        }
+                        const d = Math.sqrt(bx * bx + by * by) + 0.001;
+                        bx += (bx / d) * val * params.f_depth;
+                        by += (by / d) * val * params.f_depth;
+                    }
+                }
+                ptsList.push(new THREE.Vector2(bx, by));
+            }
+            return ptsList;
+        }
+
+        function rebuildModel(params) {
+            if (shadeGroup) scene.remove(shadeGroup);
+            if (standGroup) scene.remove(standGroup);
+            
+            shadeGroup = new THREE.Group();
+            standGroup = new THREE.Group();
+
+            const is_path_b = params.design_path === "Path B";
+
+            // ==========================================
+            // BUILD THE SHADE
+            // ==========================================
+            const vertices = [];
+            const indices = [];
+
+            for (let i = 0; i <= 40; i++) {
+                const p = i / 40;
+                let curr_w = 0;
+
+                if (is_path_b) {
+                    const pts = params.pts || [0,0,0,0,0,0];
+                    const b6 = Math.pow(1-p, 5)*pts[0] + 5*Math.pow(1-p, 4)*p*pts[1] + 10*Math.pow(1-p, 3)*Math.pow(p, 2)*pts[2] + 10*Math.pow(1-p, 2)*Math.pow(p, 3)*pts[3] + 5*(1-p)*Math.pow(p, 4)*pts[4] + Math.pow(p, 5)*pts[5];
+                    curr_w = params.bot_w + (b6 * 2);
+                } else {
+                    const c_bez = 2 * params.bel_w - (0.5 * params.bot_w) - (0.5 * params.top_w);
+                    curr_w = (Math.pow(1 - p, 2) * params.bot_w) + (2 * (1 - p) * p * c_bez) + (Math.pow(p, 2) * params.top_w);
+                }
+
+                // THE TITANIUM CORE MATH LOCK (JS VERSION)
+                const safe_min = params.h_rad > 0 ? (params.h_rad * 2) + 5 : 5;
+                curr_w = Math.max(curr_w, safe_min);
+
+                const pts2D = getPoints(curr_w, p, params);
+                const twistRad = (p * params.twist) * (Math.PI / 180);
+                
+                pts2D.forEach(pt => {
+                    const tx = pt.x * Math.cos(twistRad) - pt.y * Math.sin(twistRad);
+                    const ty = pt.x * Math.sin(twistRad) + pt.y * Math.cos(twistRad);
+                    vertices.push(tx, p * params.h_height, ty);
+                });
+            }
+
+            for (let i = 0; i < 40; i++) {
+                for (let j = 0; j < RES; j++) {
+                    const current = i * RES + j;
+                    const next = (j === RES - 1) ? (i * RES) : (current + 1);
+                    const above = current + RES;
+                    const aboveNext = next + RES;
+                    indices.push(current, next, above);
+                    indices.push(next, aboveNext, above);
+                }
+            }
+
+            const wallGeo = new THREE.BufferGeometry();
+            wallGeo.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+            wallGeo.setIndex(indices);
+            wallGeo.computeVertexNormals();
+            shadeGroup.add(new THREE.Mesh(wallGeo, shadeMaterial));
+
+            const floorPts2D = getPoints(params.bot_w, 0, params);
+            const shape = new THREE.Shape(floorPts2D);
+            if (params.h_rad > 0) {
+                const holePath = new THREE.Path();
+                holePath.absarc(0, 0, params.h_rad, 0, Math.PI * 2, false);
+                shape.holes.push(holePath);
+            }
+            const floorGeo = new THREE.ShapeGeometry(shape);
+            const floorMesh = new THREE.Mesh(floorGeo, shadeMaterial);
+            floorMesh.rotation.x = -Math.PI / 2;
+            shadeGroup.add(floorMesh);
+
+            // PHYSICALLY SHIFT THE SHADE UP
+            shadeGroup.position.y = params.st_ht;
+            scene.add(shadeGroup);
+
+            // ==========================================
+            // BUILD THE STAND
+            // ==========================================
+            const r_top = params.bot_w / 2;
+            const r_bot = params.st_style === "Conical" ? params.st_bot / 2 : r_top;
+
+            if (params.st_style === "Circular 3-Legged") {
+                const diskShape = new THREE.Shape();
+                diskShape.absarc(0, 0, r_top, 0, Math.PI * 2, false);
+                if (params.h_rad > 0) {
+                    const hole = new THREE.Path();
+                    hole.absarc(0, 0, params.h_rad, 0, Math.PI * 2, false);
+                    diskShape.holes.push(hole);
+                }
+                const diskGeo = new THREE.ExtrudeGeometry(diskShape, { depth: 5, bevelEnabled: false });
+                const diskMesh = new THREE.Mesh(diskGeo, standMaterial);
+                diskMesh.rotation.x = -Math.PI / 2;
+                diskMesh.position.y = params.st_ht - 5;
+                standGroup.add(diskMesh);
+
+                for (let i = 0; i < 3; i++) {
+                    const a = (i * 120) * Math.PI / 180;
+                    const d = r_top - 8;
+                    const legGeo = new THREE.CylinderGeometry(5, 5, params.st_ht, 16);
+                    const legMesh = new THREE.Mesh(legGeo, standMaterial);
+                    legMesh.position.set(d * Math.cos(a), params.st_ht / 2, d * Math.sin(a));
+                    standGroup.add(legMesh);
+                }
+            } else {
+                const res = 120;
+                const baseVerts = [];
+                const baseInds = [];
+                for(let i=0; i<=1; i++) {
+                    const r = i===0 ? r_bot : r_top;
+                    const y = i===0 ? 0 : params.st_ht;
+                    for(let j=0; j<res; j++) {
+                        const a = (j/res) * Math.PI*2;
+                        const rad = r + (params.st_ribs > 0 ? Math.sin(a * params.st_ribs) * params.st_rib_depth : 0);
+                        baseVerts.push(rad * Math.cos(a), y, rad * Math.sin(a));
+                    }
+                }
+                for(let j=0; j<res; j++) {
+                    const curr = j;
+                    const next = (j === res-1) ? 0 : j+1;
+                    const above = curr + res;
+                    const aboveNext = next + res;
+                    baseInds.push(curr, next, above);
+                    baseInds.push(next, aboveNext, above);
+                }
+                const bodyGeo = new THREE.BufferGeometry();
+                bodyGeo.setAttribute('position', new THREE.Float32BufferAttribute(baseVerts, 3));
+                bodyGeo.setIndex(baseInds);
+                bodyGeo.computeVertexNormals();
+                standGroup.add(new THREE.Mesh(bodyGeo, standMaterial));
+
+                for(let i=0; i<=1; i++) {
+                    const r = i===0 ? r_bot : r_top;
+                    const y = i===0 ? 0 : params.st_ht;
+                    const shape = new THREE.Shape();
+                    const pts = [];
+                    for(let j=0; j<res; j++) {
+                        const a = (j/res) * Math.PI*2;
+                        const rad = r + (params.st_ribs > 0 ? Math.sin(a * params.st_ribs) * params.st_rib_depth : 0);
+                        pts.push(new THREE.Vector2(rad * Math.cos(a), rad * Math.sin(a)));
+                    }
+                    shape.setFromPoints(pts);
+                    if(params.h_rad > 0) {
+                        const hole = new THREE.Path();
+                        hole.absarc(0,0, params.h_rad, 0, Math.PI*2, false);
+                        shape.holes.push(hole);
+                    }
+                    const capMesh = new THREE.Mesh(new THREE.ShapeGeometry(shape), standMaterial);
+                    capMesh.rotation.x = i===0 ? Math.PI/2 : -Math.PI/2;
+                    capMesh.position.y = y;
+                    standGroup.add(capMesh);
+                }
+            }
+
+            // 12mm Male Friction Sleeve
+            const lipPts = getPoints(params.bot_w - 1.6, 0, params);
+            const lipShape = new THREE.Shape(lipPts);
+            if (params.h_rad > 0) {
+                const hole = new THREE.Path();
+                hole.absarc(0, 0, params.h_rad, 0, Math.PI * 2, false);
+                lipShape.holes.push(hole);
+            }
+            const lipGeo = new THREE.ExtrudeGeometry(lipShape, { depth: 12, bevelEnabled: false });
+            const lipMesh = new THREE.Mesh(lipGeo, standMaterial);
+            lipMesh.rotation.x = -Math.PI / 2;
+            lipMesh.position.y = params.st_ht;
+            standGroup.add(lipMesh);
+
+            scene.add(standGroup);
+        }
+
+        window.updateFromStreamlit = function(jsonPayload) {
+            rebuildModel(jsonPayload);
+        };
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>
