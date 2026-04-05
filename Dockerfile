@@ -1,9 +1,9 @@
 # 1. Start with a clean Python 3.10 Linux machine
 FROM python:3.10-slim
 
-# 2. Force the installation of the OpenGL graphics drivers
+# 2. Force the installation of the OpenGL graphics drivers (Updated names)
 RUN apt-get update && apt-get install -y \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     libglu1-mesa \
     && rm -rf /var/lib/apt/lists/*
